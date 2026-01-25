@@ -130,3 +130,9 @@ button:hover {
 #info h2 {
     margin-top: 0;
 }
+#renderedFlute {
+    margin-top: 20px;
+    margin-left: auto;
+    margin-right: auto;
+    outline: solid 1px #666;
+}

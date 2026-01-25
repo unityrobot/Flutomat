@@ -49,6 +49,11 @@
             <div>
                 <label for="keySelector">Select Key (sets frequencies):</label>
                 <select id="keySelector">
+                    <option value="73">B5</option>
+                    <option value="72">C5/B#5</option>
+                    <option value="71">B4</option>
+                    <option value="70">A#4/Bb4</option>
+                    <option value="69">A4</option>
                     <option value="68">G#4/Ab4</option>
                     <option value="67">G4</option>
                     <option value="66">F#4/Gb4</option>
@@ -151,6 +156,7 @@
         <button type="submit" id="calculateButton">Calculate Positions</button>
         <button type="reset" id="resetButton">Reset Defaults</button>
 
+        <canvas id="renderedFlute" width="800" height="600"></canvas>
     </form>
 
     <div id="info">

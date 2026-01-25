@@ -46,6 +46,7 @@ class FluteCalculator {
         this.resetButton = document.getElementById('resetButton');
         this.resultEmbouchureOutput = document.getElementById('resultEmbouchure');
         this.resultEndOutput = document.getElementById('resultEnd');
+        this.renderedFluteElement = document.getElementById('renderedFlute');
 
         /** @type {HTMLInputElement[]} */
         this.holeFrequencyInputs = [];
@@ -614,7 +615,6 @@ class FluteCalculator {
             }
         }
 
-        console.log("Calculations successful.");
         return true; // Indicate success
     }
 
@@ -625,6 +625,7 @@ class FluteCalculator {
         if (this.readInputsFromForm()) { // Ensure inputs are valid first
             if (this.calculateHolePositions_Quadratic()) { // Proceed if calculation succeeds
                 this.displayResultsInForm();
+                this.renderFluteImage();
             } else {
                 alert("Calculation failed. Check console for details and verify inputs.");
                 this.clearResults();
@@ -647,6 +648,192 @@ class FluteCalculator {
             if (this.holeResultOutputs[i]) {
                 this.holeResultOutputs[i].value = format(this.holes[i]?.physicalPosition);
             }
+        }
+    }
+
+    /**
+     * Displays an illustration of the flute itself.
+     */
+    renderFluteImage() {
+        const canvas = this.renderedFluteElement;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const isCm = this.units === 'cm';
+        const digits = isCm ? 2 : 3;
+        const xPadding = 10;
+        const fluteEndX = canvas.width - xPadding;
+        const rawEmbouchureDistance = Number(this.resultEmbouchureOutput.value);
+        const rawGapBetweenClosedEndAndCork = this.embouchureDiameter / 2;
+        const rawMaxCorkLength = this.embouchureDiameter * 1.5;
+        const rawFluteLength =
+            rawEmbouchureDistance
+            + (this.embouchureDiameter / 2)
+            + rawMaxCorkLength
+            + rawGapBetweenClosedEndAndCork
+        ;
+        const displayFluteLength = (canvas.width - xPadding * 2);
+        const displayRatio = displayFluteLength / rawFluteLength;
+        const displayWallThickness = Math.floor(this.wallThickness * displayRatio);
+        const displayBoreDiameter = Math.floor(this.boreDiameter * displayRatio);
+        const spaceBetweenMeasurementLines = 40;
+        const fluteMarginY = spaceBetweenMeasurementLines * 2;
+        const measurementLinesBaseY = fluteMarginY + displayWallThickness + displayBoreDiameter;
+        const rawMinCorkLength = this.embouchureDiameter;
+        const minCorkLength = rawMinCorkLength * displayRatio;
+        const maxCorkLength = rawMaxCorkLength * displayRatio;
+
+        canvas.height = measurementLinesBaseY + (this.HOLE_COUNT + 2) * spaceBetweenMeasurementLines + xPadding;
+
+        context.setLineDash([]);
+        context.fillStyle = 'black';
+        context.strokeStyle = 'red';
+        context.lineWidth = 1;
+
+        // Draw flute's outer shape
+        {
+            context.strokeStyle = 'black';
+
+            // Top flute line
+            context.fillRect(fluteEndX - displayFluteLength, fluteMarginY, displayFluteLength, displayWallThickness);
+            // Bottom flute line
+            const bottomY = fluteMarginY + displayWallThickness + displayBoreDiameter
+            context.fillRect(fluteEndX - displayFluteLength, bottomY, displayFluteLength, displayWallThickness);
+            // Closed end
+            context.fillRect(xPadding, fluteMarginY, 1, displayWallThickness);
+
+            // Closed end / cork
+            // Reminder:
+            // Cork length is between 1 and 1.5 times the embouchure diameter.
+            // There's a color for the minimum size, and another for the maximum size.
+            context.lineWidth = 1;
+            const corkDiameter = displayBoreDiameter;
+            const corkStartX = xPadding;
+            context.fillStyle = '#dbc0b6';
+            context.fillRect(corkStartX, fluteMarginY + displayWallThickness, maxCorkLength, corkDiameter);
+            context.fillStyle = '#ba8761';
+            context.fillRect(corkStartX, fluteMarginY + displayWallThickness, minCorkLength, corkDiameter);
+        }
+
+        const units = this.units;
+
+        // Draw measurement indicators and lines
+        {
+            function drawMeasurementLine(inputValue, yPosition, text, inversePosition) {
+                inversePosition = !!inversePosition;
+                const distanceFromEnd = Number(inputValue) * displayRatio;
+                const lineLengthFromEnd = fluteEndX - distanceFromEnd;
+
+                // Horizontal line
+                context.beginPath();
+                context.setLineDash([]);
+                context.moveTo(inversePosition ? xPadding : fluteEndX, yPosition);
+                context.lineTo(lineLengthFromEnd, yPosition);
+                context.stroke();
+                // Vertical dotted line
+                context.beginPath();
+                context.setLineDash([2, 5]);
+                context.moveTo(lineLengthFromEnd, Math.floor(fluteMarginY + displayBoreDiameter / 2));
+                context.lineTo(lineLengthFromEnd, yPosition);
+                context.stroke();
+                context.setLineDash([]);
+                // Measure indication
+                const minFontSize = 3;
+                let fontSize = 15;
+                context.font = fontSize.toString() + "px Verdana";
+                context.fillStyle = 'black';
+                context.textAlign = 'left';
+                const spaceAroundLine = 10;
+                function measureText(text) {
+                    const measure = context.measureText(text);
+                    measure.height = measure.actualBoundingBoxAscent + measure.actualBoundingBoxDescent;
+                    return measure;
+                }
+                while (measureText(text).width > distanceFromEnd) {
+                    fontSize--;
+                    if (fontSize < minFontSize) {
+                        // Don't display units if size is  too small
+                        break;
+                    }
+                    context.font = fontSize.toString() + "px Verdana";
+                }
+                while ((measureText(text).height + (spaceAroundLine * 2)) > spaceBetweenMeasurementLines) {
+                    fontSize--;
+                    if (fontSize < minFontSize) {
+                        // Don't display units if size is  too small
+                        break;
+                    }
+                    context.font = fontSize.toString() + "px Verdana";
+                }
+                context.fillText(text, inversePosition ? xPadding : (fluteEndX - distanceFromEnd + spaceAroundLine), yPosition - spaceAroundLine);
+            }
+
+            context.fillStyle = 'transparent';
+            context.strokeStyle = '#666666';
+            context.lineWidth = 1;
+
+            // Vertical line from open end to last line at the bottom
+            context.beginPath();
+            context.setLineDash([2, 5]);
+            context.moveTo(fluteEndX, xPadding);
+            context.lineTo(fluteEndX, measurementLinesBaseY + Math.floor(this.HOLE_COUNT * spaceBetweenMeasurementLines));
+            context.stroke();
+
+            // Flute length measurement
+            drawMeasurementLine(rawFluteLength, measurementLinesBaseY + spaceBetweenMeasurementLines * (this.HOLE_COUNT + 2), `Flute length: ${rawFluteLength.toFixed(digits)} ${this.units}`);
+
+            // Holes measurements
+            drawMeasurementLine(this.resultEmbouchureOutput.value, measurementLinesBaseY + spaceBetweenMeasurementLines * (this.HOLE_COUNT + 1), `Embouchure: ${Number(this.resultEmbouchureOutput.value).toFixed(digits)} ${this.units} ; Ø ${this.embouchureDiameter.toFixed(digits)} ${this.units}`);
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                const length = Number(this.holeResultOutputs[i].value).toFixed(digits);
+                const diameter = Number(this.holeDiameterInputs[i].value).toFixed(digits);
+                drawMeasurementLine(length, measurementLinesBaseY + spaceBetweenMeasurementLines * (i + 1), `${length} ${this.units} ; Ø ${diameter} ${this.units}`);
+            }
+
+            // Cork measurements
+            drawMeasurementLine(rawFluteLength - rawMinCorkLength / 2, measurementLinesBaseY - spaceBetweenMeasurementLines, `Min cork length: ${rawMinCorkLength.toFixed(digits)} ${this.units}`, true);
+            drawMeasurementLine(rawFluteLength - rawMinCorkLength * 1.25, measurementLinesBaseY - spaceBetweenMeasurementLines * 2, `Max cork length: ${rawMaxCorkLength.toFixed(digits)} ${this.units}`, true);
+        }
+
+        // Hole measurements
+        {
+            context.fillStyle = 'black';
+            context.strokeStyle = 'black';
+            context.lineWidth = 1;
+
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                const distanceFromEnd = this.holeResultOutputs[i].value * displayRatio;
+                const xPosition = fluteEndX - distanceFromEnd;
+                const yPosition = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
+                const holeRadius = this.holeDiameterInputs[i].value * displayRatio / 2;
+
+                context.beginPath();
+                context.arc(xPosition, yPosition, holeRadius, 0, Math.PI * 2);
+                context.fill();
+            }
+        }
+
+        // Draw holes
+        {
+            function drawHole(rawDistanceFromEnd, diameter) {
+                const distanceFromEnd = rawDistanceFromEnd * displayRatio;
+                const xPosition = fluteEndX - distanceFromEnd;
+                const yPosition = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
+                const holeRadius = diameter * displayRatio / 2;
+
+                context.beginPath();
+                context.arc(xPosition, yPosition, holeRadius, 0, Math.PI * 2);
+                context.fill();
+            }
+
+            context.fillStyle = 'black';
+            context.strokeStyle = 'black';
+            context.lineWidth = 1;
+
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                drawHole(this.holeResultOutputs[i].value, this.holeDiameterInputs[i].value);
+            }
+            drawHole(this.resultEmbouchureOutput.value, this.embouchureDiameter);
         }
     }
 

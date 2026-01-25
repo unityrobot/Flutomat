@@ -16,6 +16,9 @@ class FluteCalculator {
         /** @const {number} Number of finger holes (fixed in this implementation) */
         this.HOLE_COUNT = 6;
 
+        /** @const {number} Standard conversion */
+        this.CM_TO_INCH = 0.3937008;
+
         // --- Configuration Constants ---
         /** @const {number} Standard acoustic end correction factor (dimensionless). */
         this.END_CORRECTION_FACTOR = 0.6133;
@@ -146,11 +149,22 @@ class FluteCalculator {
     _handleUnitChange() {
         this.readUnitsInput();
         this.updateSpeedOfSoundDisplay();
+        this.updateUnitsBasedInputs();
         // Potentially convert existing values if needed, or require re-input/recalc
-        alert("Units changed. Please verify input values and recalculate.");
         this.clearResults(); // Clear old results as they are likely invalid
     }
 
+    updateUnitsBasedInputs() {
+        const isCm = this.units === 'cm';
+        const ratio = (isCm ? (1 / this.CM_TO_INCH) : this.CM_TO_INCH);
+        const digits = isCm ? 2 : 3;
+        this.wallThicknessInput.value = (Number(this.wallThicknessInput.value) * ratio).toFixed(digits);
+        this.boreDiameterInput.value = (Number(this.boreDiameterInput.value) * ratio).toFixed(digits);
+        this.embouchureDiameterInput.value = (Number(this.embouchureDiameterInput.value) * ratio).toFixed(digits);
+        for (let i = 0; i < this.HOLE_COUNT; i++) {
+            this.holeDiameterInputs[i].value = (Number(this.holeDiameterInputs[i].value) * ratio).toFixed(digits);
+        }
+    }
 
     /**
      * Reads all input values from the form into the calculator's state.

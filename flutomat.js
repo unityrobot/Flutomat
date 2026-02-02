@@ -98,6 +98,8 @@ class FluteCalculator {
         this.readInputsFromForm(); // Load initial values
         this.updateSpeedOfSoundDisplay(); // Show initial speed of sound
         this.updateFrequenciesFromKey(); // Set initial frequencies based on default key
+
+        this.calculateAllPositions();
     }
 
     /**
@@ -111,26 +113,62 @@ class FluteCalculator {
         });
 
         // Use 'input' event for immediate feedback on temp/unit changes
-        this.tempInput.addEventListener('input', () => this._handleTemperatureChange());
-        this.tempUnitSelect.addEventListener('input', () => this._handleTemperatureChange());
+        this.tempInput.addEventListener('change', () => this._handleTemperatureChange());
+        this.tempUnitSelect.addEventListener('change', () => this._handleTemperatureChange());
         this.unitInputs.forEach(input => {
             input.addEventListener('change', () => this._handleUnitChange());
         });
 
+        document.querySelectorAll('.hole-row').forEach(row => {
+            const index = Number(row.dataset.holeIndex);
+
+            // Frequency checks
+            this.holeFrequencyInputs[index].addEventListener('change', (e) => {
+                const value = Number(e.target.value);
+                if (value <= 65.41) {
+                    e.target.value = 65.41; // Seriously, no flute can ever do lower than C2, except some bass flutes
+                }
+                if (value >= 2637) {
+                    e.target.value = 2637; // Same here, hard to expect anything higher than E7
+                }
+                this.calculateAllPositions();
+            });
+
+            // Diameters checks
+            this.holeDiameterInputs[index].addEventListener('change', (e) => {
+                const value = Number(e.target.value);
+                if (value >= Number(this.boreDiameterInput.value)) {
+                    e.target.value = Number(this.boreDiameterInput.value - this.wallThickness);
+                }
+                this.calculateAllPositions();
+            });
+        });
         this.keySelector.addEventListener('change', () => this.updateFrequenciesFromKey());
 
-        // Allow recalculation if diameters change (optional, could require explicit button press)
-        // this.boreDiameterInput.addEventListener('input', () => this.displayResultsInForm()); // Or trigger calc
-        // this.wallThicknessInput.addEventListener('input', () => this.displayResultsInForm());
-        // this.embouchureDiameterInput.addEventListener('input', () => this.displayResultsInForm());
-        // this.holeDiameterInputs.forEach(input => input.addEventListener('input', () => this.displayResultsInForm()));
+        this.embouchureDiameterInput.addEventListener('change', (e) => {
+            if (Number(e.target.value) >= Number(this.boreDiameterInput.value)) {
+                e.target.value = (Number(this.boreDiameterInput.value) - this.wallThickness);
+            }
+            this.calculateAllPositions();
+        });
+        // Force all diameters to be errored if bore diameter is bigger than holes diameters.
+        this.boreDiameterInput.addEventListener('change', (e) => {
+            this.boreDiameter = Number(isNaN(e.target.value) ? 1 : e.target.value); // Reset to 1 if invalid
+            this.embouchureDiameterInput.value = Number(this.embouchureDiameterInput.value) >= this.boreDiameter ? (this.boreDiameter - this.wallThickness) : this.embouchureDiameterInput.value;
+            this.holeDiameterInputs.forEach(holeDiameterInput => holeDiameterInput.value = Number(holeDiameterInput.value) >= this.boreDiameter ? (this.boreDiameter - this.wallThickness) : Number(holeDiameterInput.value));
+            this.calculateAllPositions();
+        });
 
         // Reset handling
         this.resetButton.addEventListener('click', () => {
             // Note: type="reset" does basic reset. We might want custom default logic here
             // For now, rely on browser reset and then re-init state
             setTimeout(() => {
-                this.readInputsFromForm();
+                try {
+                    this.readInputsFromForm();
+                } catch {
+                    // Fail gracefully: we're resetting things, after all
+                }
                 this.updateSpeedOfSoundDisplay();
                 this.updateFrequenciesFromKey(); // Ensure frequencies match reset key
                 this.clearResults();
@@ -170,10 +208,11 @@ class FluteCalculator {
     /**
      * Reads all input values from the form into the calculator's state.
      * Performs basic validation.
-     * @returns {boolean} True if all inputs are valid, false otherwise.
+     *
+     * @throws {Error} If at least one input is invalid.
      */
     readInputsFromForm() {
-        let isValid = true;
+        const errors = [];
 
         this.readUnitsInput(); // Read units first
         this.readTemperatureInput(); // Read temperature
@@ -182,8 +221,7 @@ class FluteCalculator {
             const value = parseFloat(inputElement.value);
             if (isNaN(value) || (isPositive && value <= 0)) {
                 inputElement.style.borderColor = 'red'; // Basic validation feedback
-                isValid = false;
-                console.error(`Invalid value for ${propertyName}: ${inputElement.value}`);
+                errors.push(`Invalid value for ${propertyName}: ${inputElement.value}`);
                 this[propertyName] = NaN; // Set internal state to invalid
             } else {
                 inputElement.style.borderColor = ''; // Clear error state
@@ -207,18 +245,16 @@ class FluteCalculator {
             let holeValid = true;
             if (isNaN(freq) || freq <= 0) {
                 freqInput.style.borderColor = 'red';
-                isValid = false;
                 holeValid = false;
-                console.error(`Invalid frequency for hole ${i + 1}: ${freqInput.value}`);
+                errors.push(`Invalid frequency for hole ${i + 1}: ${freqInput.value}`);
             } else {
                 freqInput.style.borderColor = '';
             }
 
             if (isNaN(diam) || diam <= 0) {
                 diamInput.style.borderColor = 'red';
-                isValid = false;
                 holeValid = false;
-                console.error(`Invalid diameter for hole ${i + 1}: ${diamInput.value}`);
+                errors.push(`Invalid diameter for hole ${i + 1}: ${diamInput.value}`);
             } else {
                 diamInput.style.borderColor = '';
             }
@@ -230,11 +266,10 @@ class FluteCalculator {
                 physicalPosition: NaN,
             };
         }
-        if (!isValid) {
-            alert("Invalid input detected. Please correct the highlighted fields.");
-        }
 
-        return isValid;
+        if (errors.length > 0) {
+            throw new Error("Invalid input detected. Please correct the highlighted fields.\n- "+errors.join("\n- "));
+        }
     }
 
     /** Reads the selected unit system from the radio buttons. */
@@ -249,10 +284,9 @@ class FluteCalculator {
         const tempUnit = this.tempUnitSelect.value;
 
         if (isNaN(tempValue)) {
-            this.temperatureCelsius = 20; // Default on error
-            console.error("Invalid temperature input");
-            this.tempInput.style.borderColor = 'red';
-            return; // Keep last valid speed of sound? Or set to NaN?
+            // Force invalid values to be reset
+            this.temperatureCelsius = tempUnit === 'F' ? 68 : 20; // Default on error
+            console.error(`Invalid temperature input "${tempValue}". Resetting to ${this.temperatureCelsius}`);
         } else {
             this.tempInput.style.borderColor = '';
         }
@@ -530,8 +564,10 @@ class FluteCalculator {
         const discriminant1 = (b1 * b1) - 4 * a1 * c1;
         if (discriminant1 < 0 || a1 === 0) {
             console.error("Calculation failed: Cannot solve quadratic for hole 1 (discriminant < 0 or a=0).", { a1, b1, c1, discriminant1 });
+            this.holeDiameterInputs[0].style.borderColor = 'red';
             return false;
         }
+        this.holeDiameterInputs[0].style.borderColor = '';
         // We expect Xf[0] < L1 and Xf[0] < Xend. The solution using the minus sign usually yields the physically correct result.
         this.holes[holeIndex1].acousticPosition = (-b1 - Math.sqrt(discriminant1)) / (2 * a1);
         if (isNaN(this.holes[holeIndex1].acousticPosition)) {
@@ -583,8 +619,10 @@ class FluteCalculator {
             const discriminant_n = (b_n * b_n) - 4.0 * a_n * c_n;
             if (discriminant_n < 0) {
                 console.error(`Calculation failed: Cannot solve quadratic for hole ${n + 1} (discriminant < 0).`, { a_n, b_n, c_n, discriminant_n });
+                this.holeDiameterInputs[n-1].style.borderColor = 'red';
                 return false;
             }
+            this.holeDiameterInputs[n-1].style.borderColor = '';
             // Expect Xf[n] < Ln and Xf[n] < Xf[n-1]. The minus sign solution is typically correct.
             this.holes[n].acousticPosition = (-b_n - Math.sqrt(discriminant_n)) / (2.0 * a_n);
             if (isNaN(this.holes[n].acousticPosition)) {
@@ -622,16 +660,15 @@ class FluteCalculator {
      * Performs the full calculation pipeline: read inputs, calculate, display results.
      */
     calculateAllPositions() {
-        if (this.readInputsFromForm()) { // Ensure inputs are valid first
-            if (this.calculateHolePositions_Quadratic()) { // Proceed if calculation succeeds
-                this.displayResultsInForm();
-                this.renderFluteImage();
-            } else {
-                alert("Calculation failed. Check console for details and verify inputs.");
-                this.clearResults();
-            }
-        } else {
-            this.clearResults(); // Clear results if inputs are invalid
+        try {
+            this.readInputsFromForm(); // Ensure inputs are valid first
+            this.calculateHolePositions_Quadratic();
+            this.displayResultsInForm();
+            this.renderFluteImage();
+        } catch (e) {
+            alert("Calculation failed:\n"+e.message);
+            this.clearResults();
+            this.clearFluteImage();
         }
     }
 
@@ -649,6 +686,12 @@ class FluteCalculator {
                 this.holeResultOutputs[i].value = format(this.holes[i]?.physicalPosition);
             }
         }
+    }
+
+    clearFluteImage() {
+        const canvas = this.renderedFluteElement;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
     }
 
     /**

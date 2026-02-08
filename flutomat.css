@@ -104,12 +104,15 @@ button {
     margin-right: 10px;
 }
 
-button[type="reset"] {
-    background-color: #6c757d;
-}
-
 button:hover {
     opacity: 0.9;
+}
+
+#resetButton {
+    background-color: #6c757d;
+}
+#printButton {
+    background-color: #5b5195;
 }
 
 #speedOfSoundDisplay {
@@ -134,5 +137,4 @@ button:hover {
     margin-top: 20px;
     margin-left: auto;
     margin-right: auto;
-    outline: solid 1px #666;
 }

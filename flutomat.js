@@ -47,6 +47,7 @@ class FluteCalculator {
         this.resultEmbouchureOutput = document.getElementById('resultEmbouchure');
         this.resultEndOutput = document.getElementById('resultEnd');
         this.renderedFluteElement = document.getElementById('renderedFlute');
+        this.printButton = document.getElementById('printButton');
 
         /** @type {HTMLInputElement[]} */
         this.holeFrequencyInputs = [];
@@ -173,6 +174,10 @@ class FluteCalculator {
                 this.updateFrequenciesFromKey(); // Ensure frequencies match reset key
                 this.clearResults();
             }, 0); // Allow form reset to happen first
+        });
+
+        this.printButton.addEventListener('click', () => {
+            this.printImage();
         });
     }
 
@@ -704,17 +709,10 @@ class FluteCalculator {
 
         const isCm = this.units === 'cm';
         const digits = isCm ? 2 : 3;
-        const xPadding = 10;
+        const xPadding = 0;
         const fluteEndX = canvas.width - xPadding;
-        const rawEmbouchureDistance = Number(this.resultEmbouchureOutput.value);
-        const rawGapBetweenClosedEndAndCork = this.embouchureDiameter / 2;
         const rawMaxCorkLength = this.embouchureDiameter * 1.5;
-        const rawFluteLength =
-            rawEmbouchureDistance
-            + (this.embouchureDiameter / 2)
-            + rawMaxCorkLength
-            + rawGapBetweenClosedEndAndCork
-        ;
+        const rawFluteLength = this.getRawFluteLength();
         const displayFluteLength = (canvas.width - xPadding * 2);
         const displayRatio = displayFluteLength / rawFluteLength;
         const displayWallThickness = Math.floor(this.wallThickness * displayRatio);
@@ -795,9 +793,10 @@ class FluteCalculator {
                 while (measureText(text).width > distanceFromEnd) {
                     fontSize--;
                     if (fontSize < minFontSize) {
-                        // Don't display units if size is  too small
+                        // Don't display units if size is too small
                         break;
                     }
+                    console.info('diminish fontSize for txt', fontSize, text, measureText(text));
                     context.font = fontSize.toString() + "px Verdana";
                 }
                 while ((measureText(text).height + (spaceAroundLine * 2)) > spaceBetweenMeasurementLines) {
@@ -878,6 +877,86 @@ class FluteCalculator {
             }
             drawHole(this.resultEmbouchureOutput.value, this.embouchureDiameter);
         }
+    }
+
+    /**
+     * Of course, it could be just "this.embouchureDiameter * 2.5",
+     * but at least there's an explanation on why we have these numbers.
+     * Clarity over efficiency is better here :)
+     *
+     * @returns {number}
+     */
+    getRawFluteLength() {
+        return Number(this.resultEmbouchureOutput.value) // Raw embouchure distance
+            + Number(this.embouchureDiameter / 2) // Embouchure itself
+            + Number(this.embouchureDiameter * 1.5) // Raw max cork length
+            + Number(this.embouchureDiameter / 2) // Raw gap between closed end and cork
+        ;
+    }
+
+    printImage() {
+        const rawFluteLength = this.getRawFluteLength();
+        const cssUnit = this.units.substring(0, 2); // "cm" or "in"
+        const imageWidth = `${rawFluteLength.toFixed(2)}${cssUnit}`;
+        const imageDataUrl = this.renderedFluteElement.toDataURL();
+
+        const pageMarginMm = 5;
+        const a4LandscapeWidthMm = 297;
+        const printableWidthMm = a4LandscapeWidthMm - 2 * pageMarginMm;
+        const printableWidth = cssUnit === 'cm'
+            ? printableWidthMm / 10 // Metric system
+            : printableWidthMm / 25.4 // Imperial system
+        ;
+        const pageCount = Math.ceil(rawFluteLength / printableWidth);
+
+        let segmentsHtml = '';
+        for (let i = 0; i < pageCount; i++) {
+            const offset = i * printableWidth;
+            const pageBreak = i < pageCount - 1 ? 'page-break-after: always;' : '';
+            segmentsHtml += `
+                <div class="segment" style="${pageBreak}">
+                    <img src="${imageDataUrl}" alt="Flute Diagram (part ${i + 1}/${pageCount})"
+                         style="margin-left: -${offset.toFixed(4)}${cssUnit};">
+                </div>
+            `;
+        }
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <title>Flute Diagram</title>
+                <style>
+                    @page {
+                        size: A4 landscape;
+                        margin: 0;
+                    }
+                    body {
+                        margin: ${pageMarginMm}mm;
+                        padding: 0;
+                    }
+                    .segment {
+                        width: ${printableWidth.toFixed(4)}${cssUnit};
+                        overflow: hidden;
+                    }
+                    .segment img {
+                        display: block;
+                        width: ${imageWidth};
+                        height: auto;
+                    }
+                </style>
+            </head>
+            <body>
+                ${segmentsHtml}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+
+        printWindow.document.querySelector('img').onload = () => {
+            printWindow.print();
+        };
     }
 
     /** Clears all result output fields. */

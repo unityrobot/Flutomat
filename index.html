@@ -35,11 +35,11 @@
             <legend>Pipe Dimensions</legend>
             <div>
                 <label for="boreDiameter">Inside Bore Diameter:</label>
-                <input type="number" name="boreDiameter" id="boreDiameter" min="0.2" value="0.824" step="any" required>
+                <input type="number" name="boreDiameter" id="boreDiameter" min="0.01" value="0.824" step="any" required>
             </div>
             <div>
                 <label for="wallThickness">Wall Thickness:</label>
-                <input type="number" name="wallThickness" id="wallThickness" min="0.1" value="0.113" step="any" required>
+                <input type="number" name="wallThickness" id="wallThickness" min="0.01" value="0.113" step="any" required>
             </div>
         </fieldset>
 
@@ -153,8 +153,9 @@
             </table>
         </fieldset>
 
-        <button type="submit" id="calculateButton">Calculate Positions</button>
-        <button type="reset" id="resetButton">Reset Defaults</button>
+        <button type="submit" id="calculateButton">🧮&nbsp;Calculate Positions</button>
+        <button type="button" id="printButton">🖨&nbsp;Print image</button>
+        <button type="reset" id="resetButton">🗑&nbsp;Reset Defaults</button>
 
         <canvas id="renderedFlute" width="800" height="600"></canvas>
     </form>

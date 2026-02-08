@@ -723,13 +723,32 @@ class FluteCalculator {
         const rawMinCorkLength = this.embouchureDiameter;
         const minCorkLength = rawMinCorkLength * displayRatio;
         const maxCorkLength = rawMaxCorkLength * displayRatio;
+        const centerFluteY = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
 
         canvas.height = measurementLinesBaseY + (this.HOLE_COUNT + 2) * spaceBetweenMeasurementLines + xPadding;
+
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, canvas.width, canvas.height);
 
         context.setLineDash([]);
         context.fillStyle = 'black';
         context.strokeStyle = 'red';
         context.lineWidth = 1;
+
+        // Small arcs under the flute's shape, as indicators
+        {
+            const numberOfArcs = 100;
+
+            context.strokeStyle = '#dddddd';
+            // context.strokeStyle = 'red';
+
+            for (let i = 1; i <= numberOfArcs; i++) {
+                const arcX = maxCorkLength * 1.5 + Math.floor(i * (displayFluteLength) / numberOfArcs);
+                context.beginPath();
+                context.arc(arcX, centerFluteY, displayBoreDiameter / 2, Math.PI * 0.5, Math.PI * 1.5);
+                context.stroke();
+            }
+        }
 
         // Draw flute's outer shape
         {
@@ -755,8 +774,6 @@ class FluteCalculator {
             context.fillStyle = '#ba8761';
             context.fillRect(corkStartX, fluteMarginY + displayWallThickness, minCorkLength, corkDiameter);
         }
-
-        const units = this.units;
 
         // Draw measurement indicators and lines
         {
@@ -796,7 +813,6 @@ class FluteCalculator {
                         // Don't display units if size is too small
                         break;
                     }
-                    console.info('diminish fontSize for txt', fontSize, text, measureText(text));
                     context.font = fontSize.toString() + "px Verdana";
                 }
                 while ((measureText(text).height + (spaceAroundLine * 2)) > spaceBetweenMeasurementLines) {
@@ -846,11 +862,10 @@ class FluteCalculator {
             for (let i = 0; i < this.HOLE_COUNT; i++) {
                 const distanceFromEnd = this.holeResultOutputs[i].value * displayRatio;
                 const xPosition = fluteEndX - distanceFromEnd;
-                const yPosition = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
                 const holeRadius = this.holeDiameterInputs[i].value * displayRatio / 2;
 
                 context.beginPath();
-                context.arc(xPosition, yPosition, holeRadius, 0, Math.PI * 2);
+                context.arc(xPosition, centerFluteY, holeRadius, 0, Math.PI * 2);
                 context.fill();
             }
         }
@@ -860,16 +875,28 @@ class FluteCalculator {
             function drawHole(rawDistanceFromEnd, diameter) {
                 const distanceFromEnd = rawDistanceFromEnd * displayRatio;
                 const xPosition = fluteEndX - distanceFromEnd;
-                const yPosition = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
                 const holeRadius = diameter * displayRatio / 2;
 
+                context.fillStyle = 'black';
+                context.strokeStyle = 'black';
+
                 context.beginPath();
-                context.arc(xPosition, yPosition, holeRadius, 0, Math.PI * 2);
+                context.arc(xPosition, centerFluteY, holeRadius, 0, Math.PI * 2);
                 context.fill();
+
+                context.fillStyle = 'white';
+                context.strokeStyle = 'white';
+                context.beginPath();
+                context.moveTo(xPosition - 4, centerFluteY);
+                context.lineTo(xPosition + 4, centerFluteY);
+                context.stroke();
+                context.beginPath();
+                context.moveTo(xPosition, centerFluteY - 4);
+                context.lineTo(xPosition, centerFluteY + 4);
+                context.stroke();
+
             }
 
-            context.fillStyle = 'black';
-            context.strokeStyle = 'black';
             context.lineWidth = 1;
 
             for (let i = 0; i < this.HOLE_COUNT; i++) {

@@ -46,6 +46,8 @@ class FluteCalculator {
         this.resetButton = document.getElementById('resetButton');
         this.resultEmbouchureOutput = document.getElementById('resultEmbouchure');
         this.resultEndOutput = document.getElementById('resultEnd');
+        this.renderedFluteElement = document.getElementById('renderedFlute');
+        this.printButton = document.getElementById('printButton');
 
         /** @type {HTMLInputElement[]} */
         this.holeFrequencyInputs = [];
@@ -97,6 +99,8 @@ class FluteCalculator {
         this.readInputsFromForm(); // Load initial values
         this.updateSpeedOfSoundDisplay(); // Show initial speed of sound
         this.updateFrequenciesFromKey(); // Set initial frequencies based on default key
+
+        this.calculateAllPositions();
     }
 
     /**
@@ -110,30 +114,70 @@ class FluteCalculator {
         });
 
         // Use 'input' event for immediate feedback on temp/unit changes
-        this.tempInput.addEventListener('input', () => this._handleTemperatureChange());
-        this.tempUnitSelect.addEventListener('input', () => this._handleTemperatureChange());
+        this.tempInput.addEventListener('change', () => this._handleTemperatureChange());
+        this.tempUnitSelect.addEventListener('change', () => this._handleTemperatureChange());
         this.unitInputs.forEach(input => {
             input.addEventListener('change', () => this._handleUnitChange());
         });
 
+        document.querySelectorAll('.hole-row').forEach(row => {
+            const index = Number(row.dataset.holeIndex);
+
+            // Frequency checks
+            this.holeFrequencyInputs[index].addEventListener('change', (e) => {
+                const value = Number(e.target.value);
+                if (value <= 65.41) {
+                    e.target.value = 65.41; // Seriously, no flute can ever do lower than C2, except some bass flutes
+                }
+                if (value >= 2637) {
+                    e.target.value = 2637; // Same here, hard to expect anything higher than E7
+                }
+                this.calculateAllPositions();
+            });
+
+            // Diameters checks
+            this.holeDiameterInputs[index].addEventListener('change', (e) => {
+                const value = Number(e.target.value);
+                if (value >= Number(this.boreDiameterInput.value)) {
+                    e.target.value = Number(this.boreDiameterInput.value - this.wallThickness);
+                }
+                this.calculateAllPositions();
+            });
+        });
         this.keySelector.addEventListener('change', () => this.updateFrequenciesFromKey());
 
-        // Allow recalculation if diameters change (optional, could require explicit button press)
-        // this.boreDiameterInput.addEventListener('input', () => this.displayResultsInForm()); // Or trigger calc
-        // this.wallThicknessInput.addEventListener('input', () => this.displayResultsInForm());
-        // this.embouchureDiameterInput.addEventListener('input', () => this.displayResultsInForm());
-        // this.holeDiameterInputs.forEach(input => input.addEventListener('input', () => this.displayResultsInForm()));
+        this.embouchureDiameterInput.addEventListener('change', (e) => {
+            if (Number(e.target.value) >= Number(this.boreDiameterInput.value)) {
+                e.target.value = (Number(this.boreDiameterInput.value) - this.wallThickness);
+            }
+            this.calculateAllPositions();
+        });
+        // Force all diameters to be errored if bore diameter is bigger than holes diameters.
+        this.boreDiameterInput.addEventListener('change', (e) => {
+            this.boreDiameter = Number(isNaN(e.target.value) ? 1 : e.target.value); // Reset to 1 if invalid
+            this.embouchureDiameterInput.value = Number(this.embouchureDiameterInput.value) >= this.boreDiameter ? (this.boreDiameter - this.wallThickness) : this.embouchureDiameterInput.value;
+            this.holeDiameterInputs.forEach(holeDiameterInput => holeDiameterInput.value = Number(holeDiameterInput.value) >= this.boreDiameter ? (this.boreDiameter - this.wallThickness) : Number(holeDiameterInput.value));
+            this.calculateAllPositions();
+        });
 
         // Reset handling
         this.resetButton.addEventListener('click', () => {
             // Note: type="reset" does basic reset. We might want custom default logic here
             // For now, rely on browser reset and then re-init state
             setTimeout(() => {
-                this.readInputsFromForm();
+                try {
+                    this.readInputsFromForm();
+                } catch {
+                    // Fail gracefully: we're resetting things, after all
+                }
                 this.updateSpeedOfSoundDisplay();
                 this.updateFrequenciesFromKey(); // Ensure frequencies match reset key
                 this.clearResults();
             }, 0); // Allow form reset to happen first
+        });
+
+        this.printButton.addEventListener('click', () => {
+            this.printImage();
         });
     }
 
@@ -169,10 +213,11 @@ class FluteCalculator {
     /**
      * Reads all input values from the form into the calculator's state.
      * Performs basic validation.
-     * @returns {boolean} True if all inputs are valid, false otherwise.
+     *
+     * @throws {Error} If at least one input is invalid.
      */
     readInputsFromForm() {
-        let isValid = true;
+        const errors = [];
 
         this.readUnitsInput(); // Read units first
         this.readTemperatureInput(); // Read temperature
@@ -181,8 +226,7 @@ class FluteCalculator {
             const value = parseFloat(inputElement.value);
             if (isNaN(value) || (isPositive && value <= 0)) {
                 inputElement.style.borderColor = 'red'; // Basic validation feedback
-                isValid = false;
-                console.error(`Invalid value for ${propertyName}: ${inputElement.value}`);
+                errors.push(`Invalid value for ${propertyName}: ${inputElement.value}`);
                 this[propertyName] = NaN; // Set internal state to invalid
             } else {
                 inputElement.style.borderColor = ''; // Clear error state
@@ -206,18 +250,16 @@ class FluteCalculator {
             let holeValid = true;
             if (isNaN(freq) || freq <= 0) {
                 freqInput.style.borderColor = 'red';
-                isValid = false;
                 holeValid = false;
-                console.error(`Invalid frequency for hole ${i + 1}: ${freqInput.value}`);
+                errors.push(`Invalid frequency for hole ${i + 1}: ${freqInput.value}`);
             } else {
                 freqInput.style.borderColor = '';
             }
 
             if (isNaN(diam) || diam <= 0) {
                 diamInput.style.borderColor = 'red';
-                isValid = false;
                 holeValid = false;
-                console.error(`Invalid diameter for hole ${i + 1}: ${diamInput.value}`);
+                errors.push(`Invalid diameter for hole ${i + 1}: ${diamInput.value}`);
             } else {
                 diamInput.style.borderColor = '';
             }
@@ -229,11 +271,10 @@ class FluteCalculator {
                 physicalPosition: NaN,
             };
         }
-        if (!isValid) {
-            alert("Invalid input detected. Please correct the highlighted fields.");
-        }
 
-        return isValid;
+        if (errors.length > 0) {
+            throw new Error("Invalid input detected. Please correct the highlighted fields.\n- "+errors.join("\n- "));
+        }
     }
 
     /** Reads the selected unit system from the radio buttons. */
@@ -248,10 +289,9 @@ class FluteCalculator {
         const tempUnit = this.tempUnitSelect.value;
 
         if (isNaN(tempValue)) {
-            this.temperatureCelsius = 20; // Default on error
-            console.error("Invalid temperature input");
-            this.tempInput.style.borderColor = 'red';
-            return; // Keep last valid speed of sound? Or set to NaN?
+            // Force invalid values to be reset
+            this.temperatureCelsius = tempUnit === 'F' ? 68 : 20; // Default on error
+            console.error(`Invalid temperature input "${tempValue}". Resetting to ${this.temperatureCelsius}`);
         } else {
             this.tempInput.style.borderColor = '';
         }
@@ -529,8 +569,10 @@ class FluteCalculator {
         const discriminant1 = (b1 * b1) - 4 * a1 * c1;
         if (discriminant1 < 0 || a1 === 0) {
             console.error("Calculation failed: Cannot solve quadratic for hole 1 (discriminant < 0 or a=0).", { a1, b1, c1, discriminant1 });
+            this.holeDiameterInputs[0].style.borderColor = 'red';
             return false;
         }
+        this.holeDiameterInputs[0].style.borderColor = '';
         // We expect Xf[0] < L1 and Xf[0] < Xend. The solution using the minus sign usually yields the physically correct result.
         this.holes[holeIndex1].acousticPosition = (-b1 - Math.sqrt(discriminant1)) / (2 * a1);
         if (isNaN(this.holes[holeIndex1].acousticPosition)) {
@@ -582,8 +624,10 @@ class FluteCalculator {
             const discriminant_n = (b_n * b_n) - 4.0 * a_n * c_n;
             if (discriminant_n < 0) {
                 console.error(`Calculation failed: Cannot solve quadratic for hole ${n + 1} (discriminant < 0).`, { a_n, b_n, c_n, discriminant_n });
+                this.holeDiameterInputs[n-1].style.borderColor = 'red';
                 return false;
             }
+            this.holeDiameterInputs[n-1].style.borderColor = '';
             // Expect Xf[n] < Ln and Xf[n] < Xf[n-1]. The minus sign solution is typically correct.
             this.holes[n].acousticPosition = (-b_n - Math.sqrt(discriminant_n)) / (2.0 * a_n);
             if (isNaN(this.holes[n].acousticPosition)) {
@@ -614,7 +658,6 @@ class FluteCalculator {
             }
         }
 
-        console.log("Calculations successful.");
         return true; // Indicate success
     }
 
@@ -622,15 +665,15 @@ class FluteCalculator {
      * Performs the full calculation pipeline: read inputs, calculate, display results.
      */
     calculateAllPositions() {
-        if (this.readInputsFromForm()) { // Ensure inputs are valid first
-            if (this.calculateHolePositions_Quadratic()) { // Proceed if calculation succeeds
-                this.displayResultsInForm();
-            } else {
-                alert("Calculation failed. Check console for details and verify inputs.");
-                this.clearResults();
-            }
-        } else {
-            this.clearResults(); // Clear results if inputs are invalid
+        try {
+            this.readInputsFromForm(); // Ensure inputs are valid first
+            this.calculateHolePositions_Quadratic();
+            this.displayResultsInForm();
+            this.renderFluteImage();
+        } catch (e) {
+            alert("Calculation failed:\n"+e.message);
+            this.clearResults();
+            this.clearFluteImage();
         }
     }
 
@@ -648,6 +691,299 @@ class FluteCalculator {
                 this.holeResultOutputs[i].value = format(this.holes[i]?.physicalPosition);
             }
         }
+    }
+
+    clearFluteImage() {
+        const canvas = this.renderedFluteElement;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    /**
+     * Displays an illustration of the flute itself.
+     */
+    renderFluteImage() {
+        const canvas = this.renderedFluteElement;
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const isCm = this.units === 'cm';
+        const digits = isCm ? 2 : 3;
+        const xPadding = 0;
+        const fluteEndX = canvas.width - xPadding;
+        const rawMaxCorkLength = this.embouchureDiameter * 1.5;
+        const rawFluteLength = this.getRawFluteLength();
+        const displayFluteLength = (canvas.width - xPadding * 2);
+        const displayRatio = displayFluteLength / rawFluteLength;
+        const displayWallThickness = Math.floor(this.wallThickness * displayRatio);
+        const displayBoreDiameter = Math.floor(this.boreDiameter * displayRatio);
+        const spaceBetweenMeasurementLines = 40;
+        const fluteMarginY = spaceBetweenMeasurementLines * 2;
+        const measurementLinesBaseY = fluteMarginY + displayWallThickness + displayBoreDiameter;
+        const rawMinCorkLength = this.embouchureDiameter;
+        const minCorkLength = rawMinCorkLength * displayRatio;
+        const maxCorkLength = rawMaxCorkLength * displayRatio;
+        const centerFluteY = fluteMarginY + displayWallThickness + displayBoreDiameter / 2;
+
+        canvas.height = measurementLinesBaseY + (this.HOLE_COUNT + 2) * spaceBetweenMeasurementLines + xPadding;
+
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        context.setLineDash([]);
+        context.fillStyle = 'black';
+        context.strokeStyle = 'red';
+        context.lineWidth = 1;
+
+        // Small arcs under the flute's shape, as indicators
+        {
+            const numberOfArcs = 100;
+
+            context.strokeStyle = '#dddddd';
+            // context.strokeStyle = 'red';
+
+            for (let i = 1; i <= numberOfArcs; i++) {
+                const arcX = maxCorkLength * 1.5 + Math.floor(i * (displayFluteLength) / numberOfArcs);
+                context.beginPath();
+                context.arc(arcX, centerFluteY, displayBoreDiameter / 2, Math.PI * 0.5, Math.PI * 1.5);
+                context.stroke();
+            }
+        }
+
+        // Draw flute's outer shape
+        {
+            context.strokeStyle = 'black';
+
+            // Top flute line
+            context.fillRect(fluteEndX - displayFluteLength, fluteMarginY, displayFluteLength, displayWallThickness);
+            // Bottom flute line
+            const bottomY = fluteMarginY + displayWallThickness + displayBoreDiameter
+            context.fillRect(fluteEndX - displayFluteLength, bottomY, displayFluteLength, displayWallThickness);
+            // Closed end
+            context.fillRect(xPadding, fluteMarginY, 1, displayWallThickness);
+
+            // Closed end / cork
+            // Reminder:
+            // Cork length is between 1 and 1.5 times the embouchure diameter.
+            // There's a color for the minimum size, and another for the maximum size.
+            context.lineWidth = 1;
+            const corkDiameter = displayBoreDiameter;
+            const corkStartX = xPadding;
+            context.fillStyle = '#dbc0b6';
+            context.fillRect(corkStartX, fluteMarginY + displayWallThickness, maxCorkLength, corkDiameter);
+            context.fillStyle = '#ba8761';
+            context.fillRect(corkStartX, fluteMarginY + displayWallThickness, minCorkLength, corkDiameter);
+        }
+
+        // Draw measurement indicators and lines
+        {
+            function drawMeasurementLine(inputValue, yPosition, text, inversePosition) {
+                inversePosition = !!inversePosition;
+                const distanceFromEnd = Number(inputValue) * displayRatio;
+                const lineLengthFromEnd = fluteEndX - distanceFromEnd;
+
+                // Horizontal line
+                context.beginPath();
+                context.setLineDash([]);
+                context.moveTo(inversePosition ? xPadding : fluteEndX, yPosition);
+                context.lineTo(lineLengthFromEnd, yPosition);
+                context.stroke();
+                // Vertical dotted line
+                context.beginPath();
+                context.setLineDash([2, 5]);
+                context.moveTo(lineLengthFromEnd, Math.floor(fluteMarginY + displayBoreDiameter / 2));
+                context.lineTo(lineLengthFromEnd, yPosition);
+                context.stroke();
+                context.setLineDash([]);
+                // Measure indication
+                const minFontSize = 3;
+                let fontSize = 15;
+                context.font = fontSize.toString() + "px Verdana";
+                context.fillStyle = 'black';
+                context.textAlign = 'left';
+                const spaceAroundLine = 10;
+                function measureText(text) {
+                    const measure = context.measureText(text);
+                    measure.height = measure.actualBoundingBoxAscent + measure.actualBoundingBoxDescent;
+                    return measure;
+                }
+                while (measureText(text).width > distanceFromEnd) {
+                    fontSize--;
+                    if (fontSize < minFontSize) {
+                        // Don't display units if size is too small
+                        break;
+                    }
+                    context.font = fontSize.toString() + "px Verdana";
+                }
+                while ((measureText(text).height + (spaceAroundLine * 2)) > spaceBetweenMeasurementLines) {
+                    fontSize--;
+                    if (fontSize < minFontSize) {
+                        // Don't display units if size is  too small
+                        break;
+                    }
+                    context.font = fontSize.toString() + "px Verdana";
+                }
+                context.fillText(text, inversePosition ? xPadding : (fluteEndX - distanceFromEnd + spaceAroundLine), yPosition - spaceAroundLine);
+            }
+
+            context.fillStyle = 'transparent';
+            context.strokeStyle = '#666666';
+            context.lineWidth = 1;
+
+            // Vertical line from open end to last line at the bottom
+            context.beginPath();
+            context.setLineDash([2, 5]);
+            context.moveTo(fluteEndX, xPadding);
+            context.lineTo(fluteEndX, measurementLinesBaseY + Math.floor(this.HOLE_COUNT * spaceBetweenMeasurementLines));
+            context.stroke();
+
+            // Flute length measurement
+            drawMeasurementLine(rawFluteLength, measurementLinesBaseY + spaceBetweenMeasurementLines * (this.HOLE_COUNT + 2), `Flute length: ${rawFluteLength.toFixed(digits)} ${this.units}`);
+
+            // Holes measurements
+            drawMeasurementLine(this.resultEmbouchureOutput.value, measurementLinesBaseY + spaceBetweenMeasurementLines * (this.HOLE_COUNT + 1), `Embouchure: ${Number(this.resultEmbouchureOutput.value).toFixed(digits)} ${this.units} ; Ø ${this.embouchureDiameter.toFixed(digits)} ${this.units}`);
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                const length = Number(this.holeResultOutputs[i].value).toFixed(digits);
+                const diameter = Number(this.holeDiameterInputs[i].value).toFixed(digits);
+                drawMeasurementLine(length, measurementLinesBaseY + spaceBetweenMeasurementLines * (i + 1), `${length} ${this.units} ; Ø ${diameter} ${this.units}`);
+            }
+
+            // Cork measurements
+            drawMeasurementLine(rawFluteLength - rawMinCorkLength / 2, measurementLinesBaseY - spaceBetweenMeasurementLines, `Min cork length: ${rawMinCorkLength.toFixed(digits)} ${this.units}`, true);
+            drawMeasurementLine(rawFluteLength - rawMinCorkLength * 1.25, measurementLinesBaseY - spaceBetweenMeasurementLines * 2, `Max cork length: ${rawMaxCorkLength.toFixed(digits)} ${this.units}`, true);
+        }
+
+        // Hole measurements
+        {
+            context.fillStyle = 'black';
+            context.strokeStyle = 'black';
+            context.lineWidth = 1;
+
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                const distanceFromEnd = this.holeResultOutputs[i].value * displayRatio;
+                const xPosition = fluteEndX - distanceFromEnd;
+                const holeRadius = this.holeDiameterInputs[i].value * displayRatio / 2;
+
+                context.beginPath();
+                context.arc(xPosition, centerFluteY, holeRadius, 0, Math.PI * 2);
+                context.fill();
+            }
+        }
+
+        // Draw holes
+        {
+            function drawHole(rawDistanceFromEnd, diameter) {
+                const distanceFromEnd = rawDistanceFromEnd * displayRatio;
+                const xPosition = fluteEndX - distanceFromEnd;
+                const holeRadius = diameter * displayRatio / 2;
+
+                context.fillStyle = 'black';
+                context.strokeStyle = 'black';
+
+                context.beginPath();
+                context.arc(xPosition, centerFluteY, holeRadius, 0, Math.PI * 2);
+                context.fill();
+
+                context.fillStyle = 'white';
+                context.strokeStyle = 'white';
+                context.beginPath();
+                context.moveTo(xPosition - 4, centerFluteY);
+                context.lineTo(xPosition + 4, centerFluteY);
+                context.stroke();
+                context.beginPath();
+                context.moveTo(xPosition, centerFluteY - 4);
+                context.lineTo(xPosition, centerFluteY + 4);
+                context.stroke();
+
+            }
+
+            context.lineWidth = 1;
+
+            for (let i = 0; i < this.HOLE_COUNT; i++) {
+                drawHole(this.holeResultOutputs[i].value, this.holeDiameterInputs[i].value);
+            }
+            drawHole(this.resultEmbouchureOutput.value, this.embouchureDiameter);
+        }
+    }
+
+    /**
+     * Of course, it could be just "this.embouchureDiameter * 2.5",
+     * but at least there's an explanation on why we have these numbers.
+     * Clarity over efficiency is better here :)
+     *
+     * @returns {number}
+     */
+    getRawFluteLength() {
+        return Number(this.resultEmbouchureOutput.value) // Raw embouchure distance
+            + Number(this.embouchureDiameter / 2) // Embouchure itself
+            + Number(this.embouchureDiameter * 1.5) // Raw max cork length
+            + Number(this.embouchureDiameter / 2) // Raw gap between closed end and cork
+        ;
+    }
+
+    printImage() {
+        const rawFluteLength = this.getRawFluteLength();
+        const cssUnit = this.units.substring(0, 2); // "cm" or "in"
+        const imageWidth = `${rawFluteLength.toFixed(2)}${cssUnit}`;
+        const imageDataUrl = this.renderedFluteElement.toDataURL();
+
+        const pageMarginMm = 5;
+        const a4LandscapeWidthMm = 297;
+        const printableWidthMm = a4LandscapeWidthMm - 2 * pageMarginMm;
+        const printableWidth = cssUnit === 'cm'
+            ? printableWidthMm / 10 // Metric system
+            : printableWidthMm / 25.4 // Imperial system
+        ;
+        const pageCount = Math.ceil(rawFluteLength / printableWidth);
+
+        let segmentsHtml = '';
+        for (let i = 0; i < pageCount; i++) {
+            const offset = i * printableWidth;
+            const pageBreak = i < pageCount - 1 ? 'page-break-after: always;' : '';
+            segmentsHtml += `
+                <div class="segment" style="${pageBreak}">
+                    <img src="${imageDataUrl}" alt="Flute Diagram (part ${i + 1}/${pageCount})"
+                         style="margin-left: -${offset.toFixed(4)}${cssUnit};">
+                </div>
+            `;
+        }
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <title>Flute Diagram</title>
+                <style>
+                    @page {
+                        size: A4 landscape;
+                        margin: 0;
+                    }
+                    body {
+                        margin: ${pageMarginMm}mm;
+                        padding: 0;
+                    }
+                    .segment {
+                        width: ${printableWidth.toFixed(4)}${cssUnit};
+                        overflow: hidden;
+                    }
+                    .segment img {
+                        display: block;
+                        width: ${imageWidth};
+                        height: auto;
+                    }
+                </style>
+            </head>
+            <body>
+                ${segmentsHtml}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+
+        printWindow.document.querySelector('img').onload = () => {
+            printWindow.print();
+        };
     }
 
     /** Clears all result output fields. */

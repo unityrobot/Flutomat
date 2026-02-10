@@ -35,11 +35,11 @@
             <legend>Pipe Dimensions</legend>
             <div>
                 <label for="boreDiameter">Inside Bore Diameter:</label>
-                <input type="number" name="boreDiameter" id="boreDiameter" value="0.824" step="any" required>
+                <input type="number" name="boreDiameter" id="boreDiameter" min="0.01" value="0.824" step="any" required>
             </div>
             <div>
                 <label for="wallThickness">Wall Thickness:</label>
-                <input type="number" name="wallThickness" id="wallThickness" value="0.113" step="any" required>
+                <input type="number" name="wallThickness" id="wallThickness" min="0.01" value="0.113" step="any" required>
             </div>
         </fieldset>
 
@@ -49,6 +49,11 @@
             <div>
                 <label for="keySelector">Select Key (sets frequencies):</label>
                 <select id="keySelector">
+                    <option value="73">B5</option>
+                    <option value="72">C5/B#5</option>
+                    <option value="71">B4</option>
+                    <option value="70">A#4/Bb4</option>
+                    <option value="69">A4</option>
                     <option value="68">G#4/Ab4</option>
                     <option value="67">G4</option>
                     <option value="66">F#4/Gb4</option>
@@ -87,7 +92,7 @@
                     <tr>
                         <td>Embouchure</td>
                         <td>---------</td>
-                        <td><input type="number" name="embouchureDiameter" id="embouchureDiameter" value="0.500"
+                        <td><input type="number" name="embouchureDiameter" id="embouchureDiameter" min="0.2" value="0.500"
                                 step="any" required></td>
                         <td><output name="resultEmbouchure" id="resultEmbouchure"
                                 for="embouchureDiameter boreDiameter wallThickness"></output></td>
@@ -98,42 +103,42 @@
                         <td>Finger Hole 6 (Highest Pitch)</td>
                         <td><input type="number" name="holeFrequency" id="freq6" value="554.37" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam6" value="0.375" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam6" min="0.2" value="0.375" step="any" required></td>
                         <td><output name="resultHole" id="result6"></output></td>
                     </tr>
                     <tr class="hole-row" data-hole-index="4">
                         <td>Finger Hole 5</td>
                         <td><input type="number" name="holeFrequency" id="freq5" value="493.88" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam5" value="0.375" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam5" min="0.2" value="0.375" step="any" required></td>
                         <td><output name="resultHole" id="result5"></output></td>
                     </tr>
                     <tr class="hole-row" data-hole-index="3">
                         <td>Finger Hole 4</td>
                         <td><input type="number" name="holeFrequency" id="freq4" value="440.00" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam4" value="0.3125" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam4" min="0.2" value="0.3125" step="any" required></td>
                         <td><output name="resultHole" id="result4"></output></td>
                     </tr>
                     <tr class="hole-row" data-hole-index="2">
                         <td>Finger Hole 3</td>
                         <td><input type="number" name="holeFrequency" id="freq3" value="392.00" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam3" value="0.3125" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam3" min="0.2" value="0.3125" step="any" required></td>
                         <td><output name="resultHole" id="result3"></output></td>
                     </tr>
                     <tr class="hole-row" data-hole-index="1">
                         <td>Finger Hole 2</td>
                         <td><input type="number" name="holeFrequency" id="freq2" value="369.99" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam2" value="0.4375" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam2" min="0.2" value="0.4375" step="any" required></td>
                         <td><output name="resultHole" id="result2"></output></td>
                     </tr>
                     <tr class="hole-row" data-hole-index="0">
                         <td>Finger Hole 1 (Lowest Pitch)</td>
                         <td><input type="number" name="holeFrequency" id="freq1" value="329.63" step="any" required>
                         </td>
-                        <td><input type="number" name="holeDiameter" id="diam1" value="0.250" step="any" required></td>
+                        <td><input type="number" name="holeDiameter" id="diam1" min="0.2" value="0.250" step="any" required></td>
                         <td><output name="resultHole" id="result1"></output></td>
                     </tr>
                     <!-- End Finger Holes -->
@@ -148,9 +153,11 @@
             </table>
         </fieldset>
 
-        <button type="submit" id="calculateButton">Calculate Positions</button>
-        <button type="reset" id="resetButton">Reset Defaults</button>
+        <button type="submit" id="calculateButton">🧮&nbsp;Calculate Positions</button>
+        <button type="button" id="printButton">🖨&nbsp;Print image</button>
+        <button type="reset" id="resetButton">🗑&nbsp;Reset Defaults</button>
 
+        <canvas id="renderedFlute" width="800" height="600"></canvas>
     </form>
 
     <div id="info">
